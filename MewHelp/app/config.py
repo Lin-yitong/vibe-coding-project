@@ -8,3 +8,6 @@ class Settings(BaseSettings):
     litellm_api_key: str
     token_budget: int = 2000
     model_alias: str = "mewhelp-after-sales"
+    database_url: str = (
+        "mysql+pymysql://mewhelp:mewhelp@127.0.0.1:3306/mewhelp?charset=utf8mb4"
+    )
