@@ -1,8 +1,20 @@
+import pytest
 from sqlalchemy.orm import Session
 
 from app.db import Conversation, Faq
 from app.repositories.faq import FaqRepository
 from app.repositories.tickets import TicketRepository
+
+
+def test_ticket_repository_rejects_unknown_ticket_type(db_session: Session) -> None:
+    with pytest.raises(ValueError, match="ticket_type"):
+        TicketRepository(db_session).create(
+            conversation_id=1,
+            description="需要人工协助",
+            ticket_type="退款",
+        )
+
+
 def test_faq_search_matches_question_answer_or_category(db_session: Session) -> None:
     db_session.add_all(
         [
