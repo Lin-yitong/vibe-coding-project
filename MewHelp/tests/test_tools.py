@@ -5,10 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.db import Conversation, Faq
-from app.repositories.faq import FaqRepository
-from app.repositories.tickets import TicketRepository
 from app.tools.business import (
-    configure_business_repositories,
+    build_business_tools,
     create_ticket,
     query_faq,
     query_logistics,
@@ -53,20 +51,20 @@ def test_mock_tools_return_deterministic_json_for_normalized_input() -> None:
 def test_query_faq_returns_matches_or_clear_no_match_message(db_session: Session) -> None:
     db_session.add(Faq(question="退货政策", answer="七天内可退", category="售后"))
     db_session.commit()
-    configure_business_repositories(faq_repository=FaqRepository(db_session))
+    tools = {tool.name: tool for tool in build_business_tools(lambda: db_session)}
 
-    assert "退货政策" in query_faq.invoke({"keyword": "退货"})
-    assert query_faq.invoke({"keyword": "邮费"}) == "未找到匹配 FAQ。"
+    assert "退货政策" in tools["query_faq"].invoke({"keyword": "退货"})
+    assert tools["query_faq"].invoke({"keyword": "邮费"}) == "未找到匹配 FAQ。"
 
 
 def test_create_ticket_uses_ticket_repository(db_session: Session) -> None:
     conversation = Conversation(user_id="demo-user", status="进行中")
     db_session.add(conversation)
     db_session.commit()
-    configure_business_repositories(ticket_repository=TicketRepository(db_session))
+    tools = {tool.name: tool for tool in build_business_tools(lambda: db_session)}
 
     content = json.loads(
-        create_ticket.invoke(
+        tools["create_ticket"].invoke(
             {
                 "conversation_id": conversation.id,
                 "description": "商品破损",

@@ -1,5 +1,6 @@
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import Conversation, Message
@@ -33,3 +34,11 @@ class ConversationRepository:
         self._session.add(message)
         self._session.commit()
         return message
+
+    def list_messages(self, conversation_id: int) -> list[Message]:
+        statement = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.id)
+        )
+        return list(self._session.scalars(statement))

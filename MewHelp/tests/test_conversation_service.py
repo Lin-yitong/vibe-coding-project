@@ -32,3 +32,6 @@ def test_message_trace_is_user_request_tool_final_answer(db_session: Session) ->
     assert rows[1].tool_calls == tool_calls
     assert rows[2].tool_call_id == "call-1"
     assert rows[3].content == "您可以在签收后七天内申请退货。"
+    assert service.completed_turns_for(conversation) == [
+        ("我要退货", "您可以在签收后七天内申请退货。")
+    ]

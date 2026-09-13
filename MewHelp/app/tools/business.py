@@ -1,10 +1,12 @@
 """LangChain business tools used by the Chapter 2 support assistant."""
 
 import json
-from typing import Protocol
+from collections.abc import Callable
 
 from langchain_core.tools import BaseTool, tool
+from sqlalchemy.orm import Session
 
+from app.db import SessionLocal
 from app.repositories.faq import FaqRepository
 from app.repositories.tickets import TicketRepository
 from app.tools.schemas import (
@@ -16,29 +18,7 @@ from app.tools.schemas import (
 )
 
 
-class _FaqSearcher(Protocol):
-    def search(self, keyword: str) -> list[object]: ...
-
-
-class _TicketCreator(Protocol):
-    def create(self, conversation_id: int, description: str, ticket_type: str) -> object: ...
-
-
-_faq_repository: _FaqSearcher | None = None
-_ticket_repository: _TicketCreator | None = None
-
-
-def configure_business_repositories(
-    *,
-    faq_repository: FaqRepository | None = None,
-    ticket_repository: TicketRepository | None = None,
-) -> None:
-    """Provide the repository dependencies for the two persistence-backed tools."""
-    global _faq_repository, _ticket_repository
-    if faq_repository is not None:
-        _faq_repository = faq_repository
-    if ticket_repository is not None:
-        _ticket_repository = ticket_repository
+SessionFactory = Callable[[], Session]
 
 
 def _json_content(value: object) -> str:
@@ -65,49 +45,45 @@ def query_logistics(order_no: str) -> str:
     )
 
 
-@tool(args_schema=QueryFaqInput)
-def query_faq(keyword: str) -> str:
-    """Use when the customer asks a policy or common question that may exist in the FAQ."""
-    if _faq_repository is None:
-        raise RuntimeError("FAQ repository is unavailable")
+def build_business_tools(session_factory: SessionFactory = SessionLocal) -> list[BaseTool]:
+    """Build tools whose persistence operations own a short-lived worker session."""
 
-    matches = _faq_repository.search(keyword)
-    if not matches:
-        return "未找到匹配 FAQ。"
-    return _json_content(
-        {
-            "matches": [
-                {
-                    "answer": row.answer,
-                    "category": row.category,
-                    "question": row.question,
-                }
-                for row in matches
-            ]
-        }
-    )
+    @tool("query_faq", args_schema=QueryFaqInput)
+    def query_faq(keyword: str) -> str:
+        """Use when the customer asks a policy or common question that may exist in the FAQ."""
+        with session_factory() as session:
+            matches = FaqRepository(session).search(keyword)
+        if not matches:
+            return "未找到匹配 FAQ。"
+        return _json_content(
+            {
+                "matches": [
+                    {
+                        "answer": row.answer,
+                        "category": row.category,
+                        "question": row.question,
+                    }
+                    for row in matches
+                ]
+            }
+        )
+
+    @tool("create_ticket", args_schema=CreateTicketInput)
+    def create_ticket(conversation_id: int, description: str, ticket_type: str) -> str:
+        """Use when the customer needs human follow-up for after-sales, a complaint, or consultation."""
+        with session_factory() as session:
+            ticket = TicketRepository(session).create(conversation_id, description, ticket_type)
+        return _json_content(
+            {
+                "status": ticket.status,
+                "ticket_no": ticket.ticket_no,
+                "ticket_type": ticket.ticket_type,
+            }
+        )
+
+    return [query_order, query_product, query_logistics, query_faq, create_ticket]
 
 
-@tool(args_schema=CreateTicketInput)
-def create_ticket(conversation_id: int, description: str, ticket_type: str) -> str:
-    """Use when the customer needs human follow-up for after-sales, a complaint, or consultation."""
-    if _ticket_repository is None:
-        raise RuntimeError("Ticket repository is unavailable")
-
-    ticket = _ticket_repository.create(conversation_id, description, ticket_type)
-    return _json_content(
-        {
-            "status": ticket.status,
-            "ticket_no": ticket.ticket_no,
-            "ticket_type": ticket.ticket_type,
-        }
-    )
-
-
-REGISTERED_TOOLS: list[BaseTool] = [
-    query_order,
-    query_product,
-    query_logistics,
-    query_faq,
-    create_ticket,
-]
+REGISTERED_TOOLS = build_business_tools()
+query_faq = next(tool for tool in REGISTERED_TOOLS if tool.name == "query_faq")
+create_ticket = next(tool for tool in REGISTERED_TOOLS if tool.name == "create_ticket")
