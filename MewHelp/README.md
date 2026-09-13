@@ -29,3 +29,12 @@ OpenAPI is available at `http://127.0.0.1:8000/openapi.json`.
 ```bash
 pytest tests/test_app.py -v
 ```
+
+## Extraction evaluation
+
+Start the API locally, then run the five structured after-sales extraction
+cases. Each returned ticket field must exactly match the fixture expectation.
+
+```bash
+python evals/run_extract_eval.py
+```
