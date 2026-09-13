@@ -139,9 +139,6 @@ def test_default_session_store_preserves_history_between_requests(
     """Catch a dependency factory that creates a new store for every request."""
     monkeypatch.setenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
     monkeypatch.setenv("LITELLM_API_KEY", "local")
-    monkeypatch.setenv("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1")
-    monkeypatch.setenv("SILICONFLOW_API_KEY", "upstream")
-    monkeypatch.setenv("SILICONFLOW_MODEL", "Qwen/Qwen3-8B")
     clear_cache = getattr(get_session_store, "cache_clear", lambda: None)
     clear_cache()
     model = FakeModel(["您好", "，我来协助您确认。"])

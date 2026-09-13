@@ -12,11 +12,21 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+cp .litellm.env.example .litellm.env
 ```
 
-Set `SILICONFLOW_API_BASE`, `SILICONFLOW_API_KEY`, `SILICONFLOW_MODEL`, and
-`LITELLM_API_KEY` in `.env`. `LITELLM_BASE_URL` should remain
-`http://localhost:4000/v1`. Do not commit `.env`.
+Use the two environment files for separate concerns:
+
+- `.env` is the FastAPI application's configuration. It contains only
+  `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `TOKEN_BUDGET`; its LiteLLM API
+  key is also the proxy's master key.
+- `.litellm.env` is the LiteLLM proxy's upstream-provider configuration. Set
+  `SILICONFLOW_API_BASE`, `SILICONFLOW_API_KEY`, and `SILICONFLOW_MODEL` there.
+
+Keep `LITELLM_BASE_URL` at `http://localhost:4000/v1`. Both local files are
+ignored by Git. `make dev` loads both files for the LiteLLM subprocess, but
+loads only `.env` for FastAPI. The application code only knows LiteLLM;
+SiliconFlow settings never enter the FastAPI process.
 
 ## Run locally
 
@@ -44,7 +54,7 @@ make eval-extract
 
 ## Manual acceptance
 
-With credentials in `.env` and `make dev` running, call the chat endpoint:
+With `.env` and `.litellm.env` configured and `make dev` running, call the chat endpoint:
 
 ```bash
 curl -N -X POST http://localhost:8000/api/chat \

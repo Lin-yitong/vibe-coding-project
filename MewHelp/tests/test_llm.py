@@ -6,9 +6,6 @@ def make_settings() -> Settings:
     return Settings(
         litellm_base_url="http://localhost:4000/v1",
         litellm_api_key="local",
-        siliconflow_api_base="https://api.siliconflow.cn/v1",
-        siliconflow_api_key="upstream",
-        siliconflow_model="Qwen/Qwen3-8B",
     )
 
 

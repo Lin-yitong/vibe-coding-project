@@ -12,3 +12,9 @@ def test_litellm_config_uses_public_alias_and_environment_secrets() -> None:
     assert "SILICONFLOW_API_KEY" not in Path("config/litellm.yaml").read_text().replace(
         "os.environ/SILICONFLOW_API_KEY", ""
     )
+
+
+def test_requirements_include_litellm_proxy_extra() -> None:
+    requirements = Path("requirements.txt").read_text().splitlines()
+
+    assert "litellm[proxy]>=1.81,<2.0" in requirements
