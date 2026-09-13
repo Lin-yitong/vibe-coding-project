@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +17,7 @@ from app.schemas.chat import ChatRequest
 router = APIRouter()
 
 
+@lru_cache(maxsize=1)
 def get_session_store() -> SessionStore:
     return SessionStore(token_budget=Settings().token_budget)
 

@@ -131,3 +131,32 @@ def test_second_call_receives_committed_history(
         "您好，我来协助您确认。",
         "我要催发货",
     ]
+
+
+def test_default_session_store_preserves_history_between_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch a dependency factory that creates a new store for every request."""
+    monkeypatch.setenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    monkeypatch.setenv("LITELLM_API_KEY", "local")
+    monkeypatch.setenv("SILICONFLOW_API_BASE", "https://api.siliconflow.cn/v1")
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "upstream")
+    monkeypatch.setenv("SILICONFLOW_MODEL", "Qwen/Qwen3-8B")
+    clear_cache = getattr(get_session_store, "cache_clear", lambda: None)
+    clear_cache()
+    model = FakeModel(["您好", "，我来协助您确认。"])
+    app.dependency_overrides[get_chat_model] = lambda: model
+
+    try:
+        with TestClient(app) as client:
+            client.post("/api/chat", json={"session_id": "s", "message": "订单 A 未发货"})
+            client.post("/api/chat", json={"session_id": "s", "message": "我要催发货"})
+    finally:
+        app.dependency_overrides.clear()
+        clear_cache()
+
+    assert [message.content for message in model.calls[1]][-3:] == [
+        "订单 A 未发货",
+        "您好，我来协助您确认。",
+        "我要催发货",
+    ]
