@@ -1,5 +1,6 @@
 from app.config import Settings
-from app.core.llm import build_chat_model, build_extract_model
+from app.core.llm import build_chat_model, build_extract_model, build_tool_calling_model
+from app.tools.business import REGISTERED_TOOLS
 
 
 def make_settings() -> Settings:
@@ -23,3 +24,24 @@ def test_extract_model_accepts_after_sales_ticket_schema() -> None:
     model = build_extract_model(make_settings())
 
     assert model is not None
+
+
+def test_tool_calling_model_binds_exactly_the_registered_tools(monkeypatch) -> None:
+    class FakeChatModel:
+        def __init__(self) -> None:
+            self.bound_tools: list[object] | None = None
+            self.bind_tools_calls = 0
+
+        def bind_tools(self, tools: list[object]) -> object:
+            self.bind_tools_calls += 1
+            self.bound_tools = tools
+            return "bound-model"
+
+    chat_model = FakeChatModel()
+    monkeypatch.setattr("app.core.llm.build_chat_model", lambda settings: chat_model)
+
+    result = build_tool_calling_model(make_settings())
+
+    assert result == "bound-model"
+    assert chat_model.bind_tools_calls == 1
+    assert chat_model.bound_tools == REGISTERED_TOOLS

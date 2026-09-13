@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import Settings
 from app.schemas.extract import AfterSalesTicket
+from app.tools.business import REGISTERED_TOOLS
 
 
 def build_chat_model(settings: Settings) -> ChatOpenAI:
@@ -18,3 +19,7 @@ def build_extract_model(settings: Settings) -> Runnable:
     return build_chat_model(settings).with_structured_output(
         AfterSalesTicket, method="json_schema"
     )
+
+
+def build_tool_calling_model(settings: Settings) -> Runnable:
+    return build_chat_model(settings).bind_tools(REGISTERED_TOOLS)
