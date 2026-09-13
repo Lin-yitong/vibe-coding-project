@@ -58,6 +58,11 @@ class FakeModel:
             raise self.error
 
 
+class AliasWithoutTokenCounterModel(FakeModel):
+    def get_num_tokens_from_messages(self, messages: Sequence[BaseMessage]) -> int:
+        raise NotImplementedError("token counting is unavailable for this model alias")
+
+
 class InitialFailureModel(FakeModel):
     def astream(self, messages: Sequence[BaseMessage]) -> AsyncIterator[AIMessageChunk]:
         raise RuntimeError("provider unavailable")
@@ -220,5 +225,33 @@ def test_default_session_store_preserves_history_between_requests(
     assert [message.content for message in model.calls[1]][-3:] == [
         "订单 A 未发货",
         "您好，我来协助您确认。",
+        "我要催发货",
+    ]
+
+
+def test_second_request_works_when_model_alias_cannot_count_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch routing history trimming through an alias-specific LiteLLM counter."""
+    monkeypatch.setenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    monkeypatch.setenv("LITELLM_API_KEY", "local")
+    clear_cache = getattr(get_session_store, "cache_clear", lambda: None)
+    clear_cache()
+    model = AliasWithoutTokenCounterModel(["您好"])
+    app.dependency_overrides[get_chat_model] = lambda: model
+
+    try:
+        with TestClient(app) as client:
+            first = client.post("/api/chat", json={"session_id": "s", "message": "订单 A 未发货"})
+            second = client.post("/api/chat", json={"session_id": "s", "message": "我要催发货"})
+    finally:
+        app.dependency_overrides.clear()
+        clear_cache()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [message.content for message in model.calls[1]][-3:] == [
+        "订单 A 未发货",
+        "您好",
         "我要催发货",
     ]

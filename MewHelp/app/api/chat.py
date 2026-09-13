@@ -11,6 +11,7 @@ from app.config import Settings
 from app.core.llm import build_chat_model
 from app.core.memory import SessionStore
 from app.core.prompts import CUSTOMER_CHAT_PROMPT
+from app.core.token_counting import count_message_tokens
 from app.schemas.chat import ChatRequest
 
 
@@ -42,7 +43,7 @@ async def stream_chat(
         request.session_id,
         request.message,
         system_message,
-        model.get_num_tokens_from_messages,
+        count_message_tokens,
     )
     try:
         stream = model.astream(messages)
