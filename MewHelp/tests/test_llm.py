@@ -1,6 +1,5 @@
 from app.config import Settings
 from app.core.llm import build_chat_model, build_extract_model, build_tool_calling_model
-from app.tools.business import REGISTERED_TOOLS
 
 
 def make_settings() -> Settings:
@@ -38,10 +37,11 @@ def test_tool_calling_model_binds_exactly_the_registered_tools(monkeypatch) -> N
             return "bound-model"
 
     chat_model = FakeChatModel()
+    tools = [object(), object()]
     monkeypatch.setattr("app.core.llm.build_chat_model", lambda settings: chat_model)
 
-    result = build_tool_calling_model(make_settings())
+    result = build_tool_calling_model(make_settings(), tools)
 
     assert result == "bound-model"
     assert chat_model.bind_tools_calls == 1
-    assert chat_model.bound_tools == REGISTERED_TOOLS
+    assert chat_model.bound_tools is tools

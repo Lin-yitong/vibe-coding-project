@@ -6,9 +6,6 @@ from collections.abc import Sequence
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
-from app.tools.business import REGISTERED_TOOLS
-
-
 class TransientToolExecutionError(Exception):
     """An execution failure that is safe to retry once."""
 
@@ -22,7 +19,7 @@ class ToolExecutionResult(BaseModel):
 
 class ToolRegistry:
     def __init__(
-        self, tools: Sequence[BaseTool] = REGISTERED_TOOLS, *, timeout_seconds: float = 5.0
+        self, tools: Sequence[BaseTool], *, timeout_seconds: float = 5.0
     ) -> None:
         self._tools = {tool.name: tool for tool in tools}
         self._timeout_seconds = timeout_seconds

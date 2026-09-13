@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Sequence
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +15,7 @@ from app.api.chat import (
     get_tool_calling_orchestrator,
 )
 from app.main import app
+from app.tools.business import query_logistics, query_order
 from app.tools.registry import ToolExecutionResult
 
 
@@ -107,7 +109,9 @@ def client(
     conversation_service: FakeConversationService, orchestrator: FakeOrchestrator
 ) -> AsyncIterator[TestClient]:
     app.dependency_overrides[get_conversation_service] = lambda: conversation_service
-    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: (
+        lambda conversation: orchestrator
+    )
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -157,7 +161,9 @@ def test_final_stream_failure_does_not_persist_completed_answer(
         FakePreparedTurn([], ["已查到"], RuntimeError("provider unavailable"))
     )
     app.dependency_overrides[get_conversation_service] = lambda: conversation_service
-    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: (
+        lambda conversation: orchestrator
+    )
     try:
         with TestClient(app) as client:
             response = client.post("/api/chat", json={"session_id": "s1", "message": "退款"})
@@ -177,7 +183,9 @@ def test_initial_planning_failure_returns_bad_gateway(
     """Catch opening a 200 SSE response when planning cannot reach the provider."""
     orchestrator = FakeOrchestrator(error=RuntimeError("provider unavailable"))
     app.dependency_overrides[get_conversation_service] = lambda: conversation_service
-    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: (
+        lambda conversation: orchestrator
+    )
     try:
         with TestClient(app) as client:
             response = client.post("/api/chat", json={"session_id": "s1", "message": "退款"})
@@ -203,7 +211,9 @@ def test_metadata_chunks_are_not_sent_or_persisted_as_answer_text(
         )
     )
     app.dependency_overrides[get_conversation_service] = lambda: conversation_service
-    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: (
+        lambda conversation: orchestrator
+    )
     try:
         with TestClient(app) as client:
             response = client.post("/api/chat", json={"session_id": "s1", "message": "退款"})
@@ -220,7 +230,9 @@ def test_empty_completed_stream_sends_done_and_persists_empty_answer(
     """Catch treating a successful no-text final stream as an upstream failure."""
     orchestrator = FakeOrchestrator(FakePreparedTurn([], []))
     app.dependency_overrides[get_conversation_service] = lambda: conversation_service
-    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: orchestrator
+    app.dependency_overrides[get_tool_calling_orchestrator] = lambda: (
+        lambda conversation: orchestrator
+    )
     try:
         with TestClient(app) as client:
             response = client.post("/api/chat", json={"session_id": "s1", "message": "退款"})
@@ -245,6 +257,33 @@ class RecordingFinalModel:
         yield AIMessageChunk(content="已记录")
 
 
+def test_default_orchestrator_factory_binds_tools_to_active_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch binding one global tool list while executing another request-scoped list."""
+    monkeypatch.setenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    monkeypatch.setenv("LITELLM_API_KEY", "local")
+    tools = [query_order, query_logistics]
+    seen: dict[str, object] = {}
+
+    def build_tools(*, conversation_id: int) -> list[object]:
+        seen["conversation_id"] = conversation_id
+        return tools
+
+    def build_planner(settings: object, bound_tools: list[object]) -> object:
+        seen["planning_tools"] = bound_tools
+        return RecordingPlanningModel()
+
+    monkeypatch.setattr("app.api.chat.build_business_tools", build_tools)
+    monkeypatch.setattr("app.api.chat.build_tool_calling_model", build_planner)
+    monkeypatch.setattr("app.api.chat.build_chat_model", lambda settings: RecordingFinalModel())
+
+    factory = get_tool_calling_orchestrator(FakeConversationService())
+    factory(SimpleNamespace(id=42))
+
+    assert seen == {"conversation_id": 42, "planning_tools": tools}
+
+
 def test_default_dependencies_use_request_sessions_and_persist_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -252,7 +291,9 @@ def test_default_dependencies_use_request_sessions_and_persist_history(
     monkeypatch.setenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
     monkeypatch.setenv("LITELLM_API_KEY", "local")
     planning_model = RecordingPlanningModel()
-    monkeypatch.setattr("app.api.chat.build_tool_calling_model", lambda settings: planning_model)
+    monkeypatch.setattr(
+        "app.api.chat.build_tool_calling_model", lambda settings, tools: planning_model
+    )
     monkeypatch.setattr("app.api.chat.build_chat_model", lambda settings: RecordingFinalModel())
     engine = create_engine(
         "sqlite://",

@@ -2,10 +2,12 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _NormalizedTextInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("*", mode="before")
     @classmethod
     def strip_text(cls, value: object) -> object:
@@ -17,7 +19,7 @@ class QueryOrderInput(_NormalizedTextInput):
 
 
 class QueryProductInput(_NormalizedTextInput):
-    product_id: str = Field(min_length=1, max_length=64)
+    product_name: str = Field(min_length=1, max_length=64)
 
 
 class QueryLogisticsInput(_NormalizedTextInput):
@@ -29,6 +31,5 @@ class QueryFaqInput(_NormalizedTextInput):
 
 
 class CreateTicketInput(_NormalizedTextInput):
-    conversation_id: int = Field(gt=0)
     description: str = Field(min_length=1, max_length=2000)
     ticket_type: Literal["售后", "投诉", "咨询"]

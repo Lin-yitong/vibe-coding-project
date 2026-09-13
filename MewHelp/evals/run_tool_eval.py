@@ -1,11 +1,21 @@
-"""Run stable, labelled Chapter 2 tool evaluations against the real registry."""
+"""Run labelled Chapter 2 tool evaluations through the production planner."""
 
 import asyncio
 import json
-from pathlib import Path
+import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.config import Settings
+from app.core.llm import build_chat_model, build_tool_calling_model
+from app.core.prompts import CUSTOMER_CHAT_PROMPT
+from app.core.tool_calling import ToolCallingOrchestrator
+from app.db import Conversation, SessionLocal
+from app.services.conversation_service import ConversationService
 from app.tools.business import build_business_tools
 from app.tools.registry import ToolExecutionResult, ToolRegistry
 
@@ -17,53 +27,32 @@ def load_cases(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 class PlannerClient(Protocol):
-    """The planning boundary used by a labelled tool evaluation."""
+    """The injected planning-and-execution boundary used by the evaluation."""
 
-    async def plan(self, message: str) -> list[dict[str, object]]: ...
-
-
-class ToolExecutor(Protocol):
-    async def execute(self, call: dict[str, object]) -> ToolExecutionResult: ...
+    async def plan_and_execute(self, message: str) -> list[ToolExecutionResult]: ...
 
 
-class LabelledPlanner:
-    """Deterministic Ch02 planning client for the fixed evaluation messages."""
+class OrchestratorPlanner:
+    """Exercise tool selection through the same bound planner used by chat."""
 
-    async def plan(self, message: str) -> list[dict[str, object]]:
-        if message == "请查询订单 1001 的物流。":
-            return [
-                {
-                    "id": "planned-logistics-1001",
-                    "name": "query_logistics",
-                    "args": {"order_no": "1001"},
-                }
-            ]
-        if message == "退货政策是什么？":
-            return [
-                {
-                    "id": "planned-faq-return-policy",
-                    "name": "query_faq",
-                    "args": {"keyword": "退货政策"},
-                }
-            ]
-        if message == "邮费是多少？":
-            return [
-                {
-                    "id": "planned-faq-postage",
-                    "name": "query_faq",
-                    "args": {"keyword": "邮费"},
-                }
-            ]
-        return []
+    def __init__(
+        self, orchestrator: ToolCallingOrchestrator, conversation: Conversation
+    ) -> None:
+        self._orchestrator = orchestrator
+        self._conversation = conversation
+
+    async def plan_and_execute(self, message: str) -> list[ToolExecutionResult]:
+        prepared = await self._orchestrator.prepare_turn(
+            list(CUSTOMER_CHAT_PROMPT.format_messages(message=message)),
+            self._conversation,
+        )
+        return prepared.tool_results
 
 
 async def _run_case(
-    case: dict[str, Any], planner: PlannerClient, registry: ToolExecutor
+    case: dict[str, Any], planner: PlannerClient
 ) -> tuple[bool, str]:
-    tool_calls = await planner.plan(case["message"])
-    results: list[ToolExecutionResult] = []
-    for tool_call in tool_calls:
-        results.append(await registry.execute(tool_call))
+    results = await planner.plan_and_execute(case["message"])
 
     actual_names = [result.name for result in results]
     if not all(result.ok for result in results) or actual_names != case["expected_tool_names"]:
@@ -94,21 +83,56 @@ async def _run_case(
 async def run_cases(
     cases: list[dict[str, Any]],
     planner: PlannerClient,
-    registry: ToolExecutor,
     emit: Callable[[str], object] = print,
 ) -> int:
     failed = False
     for case in cases:
-        passed, output = await _run_case(case, planner, registry)
+        passed, output = await _run_case(case, planner)
         emit(output)
         failed = failed or not passed
     return 1 if failed else 0
 
 
+async def run_live_cases(emit: Callable[[str], object] = print) -> int:
+    """Build the production bound planner and execute all labelled cases."""
+    settings = Settings()
+    with SessionLocal() as session:
+        conversation_service = ConversationService(session)
+        conversation = conversation_service.get_or_create("ch02-tool-eval")
+        tools = build_business_tools(conversation_id=conversation.id)
+        orchestrator = ToolCallingOrchestrator(
+            planning_model=build_tool_calling_model(settings, tools),
+            final_model=build_chat_model(settings),
+            tool_registry=ToolRegistry(tools),
+            conversation_service=conversation_service,
+        )
+        return await run_cases(
+            load_cases(), OrchestratorPlanner(orchestrator, conversation), emit
+        )
+
+
 def main() -> int:
-    return asyncio.run(
-        run_cases(load_cases(), LabelledPlanner(), ToolRegistry(build_business_tools()))
-    )
+    try:
+        return asyncio.run(run_live_cases())
+    except ValidationError:
+        print(
+            "ERROR eval-tools requires valid LITELLM_BASE_URL and "
+            "LITELLM_API_KEY values in MewHelp/.env.",
+            file=sys.stderr,
+        )
+    except SQLAlchemyError:
+        print(
+            "ERROR eval-tools could not use the project MySQL database; "
+            "run `make db-up` and wait for it to become healthy.",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(
+            "ERROR eval-tools could not call the bound planning model "
+            f"({type(exc).__name__}); verify the LiteLLM proxy and provider credentials.",
+            file=sys.stderr,
+        )
+    return 2
 
 
 if __name__ == "__main__":

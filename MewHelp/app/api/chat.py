@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from functools import lru_cache
 from typing import Annotated
 
@@ -12,7 +12,7 @@ from app.config import Settings
 from app.core.llm import build_chat_model, build_tool_calling_model
 from app.core.prompts import CUSTOMER_CHAT_PROMPT
 from app.core.tool_calling import ToolCallingOrchestrator
-from app.db import get_db_session
+from app.db import Conversation, get_db_session
 from app.schemas.chat import ChatRequest
 from app.services.conversation_service import ConversationService, ConversationSessionMap
 from app.tools.business import build_business_tools
@@ -42,14 +42,19 @@ def get_conversation_service(
 
 def get_tool_calling_orchestrator(
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
-) -> ToolCallingOrchestrator:
+) -> Callable[[Conversation], ToolCallingOrchestrator]:
     settings = Settings()
-    return ToolCallingOrchestrator(
-        planning_model=build_tool_calling_model(settings),
-        final_model=build_chat_model(settings),
-        tool_registry=ToolRegistry(build_business_tools()),
-        conversation_service=conversation_service,
-    )
+
+    def build(conversation: Conversation) -> ToolCallingOrchestrator:
+        tools = build_business_tools(conversation_id=conversation.id)
+        return ToolCallingOrchestrator(
+            planning_model=build_tool_calling_model(settings, tools),
+            final_model=build_chat_model(settings),
+            tool_registry=ToolRegistry(tools),
+            conversation_service=conversation_service,
+        )
+
+    return build
 
 
 def _messages_for(
@@ -67,9 +72,13 @@ def _messages_for(
 async def stream_chat(
     request: ChatRequest,
     conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
-    orchestrator: Annotated[ToolCallingOrchestrator, Depends(get_tool_calling_orchestrator)],
+    orchestrator_factory: Annotated[
+        Callable[[Conversation], ToolCallingOrchestrator],
+        Depends(get_tool_calling_orchestrator),
+    ],
 ) -> StreamingResponse:
     conversation = conversation_service.get_or_create(request.session_id)
+    orchestrator = orchestrator_factory(conversation)
     messages = _messages_for(
         request.message, conversation_service.completed_turns_for(conversation)
     )

@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE TABLE conversations (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id VARCHAR(64) NOT NULL,

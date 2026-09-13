@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 INSERT INTO faq (question, answer, category) VALUES
     ('退货政策是什么', '商品在签收后 7 天内，如保持完好且不影响二次销售，可申请退货。', '售后'),
     ('订单多久发货', '现货订单通常会在付款后 48 小时内发货。', '物流'),

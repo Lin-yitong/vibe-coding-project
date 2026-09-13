@@ -32,9 +32,11 @@ def query_order(order_no: str) -> str:
 
 
 @tool(args_schema=QueryProductInput)
-def query_product(product_id: str) -> str:
+def query_product(product_name: str) -> str:
     """Use when the customer asks for the price, stock, or details of one product."""
-    return _json_content({"product_id": product_id, "stock": "有货", "title": "MewHelp 演示商品"})
+    return _json_content(
+        {"product_name": product_name, "stock": "有货", "title": "MewHelp 演示商品"}
+    )
 
 
 @tool(args_schema=QueryLogisticsInput)
@@ -45,8 +47,10 @@ def query_logistics(order_no: str) -> str:
     )
 
 
-def build_business_tools(session_factory: SessionFactory = SessionLocal) -> list[BaseTool]:
-    """Build tools whose persistence operations own a short-lived worker session."""
+def build_business_tools(
+    *, conversation_id: int, session_factory: SessionFactory = SessionLocal
+) -> list[BaseTool]:
+    """Build tools bound to one active conversation and short-lived DB sessions."""
 
     @tool("query_faq", args_schema=QueryFaqInput)
     def query_faq(keyword: str) -> str:
@@ -69,7 +73,7 @@ def build_business_tools(session_factory: SessionFactory = SessionLocal) -> list
         )
 
     @tool("create_ticket", args_schema=CreateTicketInput)
-    def create_ticket(conversation_id: int, description: str, ticket_type: str) -> str:
+    def create_ticket(description: str, ticket_type: str) -> str:
         """Use when the customer needs human follow-up for after-sales, a complaint, or consultation."""
         with session_factory() as session:
             ticket = TicketRepository(session).create(conversation_id, description, ticket_type)
@@ -82,8 +86,3 @@ def build_business_tools(session_factory: SessionFactory = SessionLocal) -> list
         )
 
     return [query_order, query_product, query_logistics, query_faq, create_ticket]
-
-
-REGISTERED_TOOLS = build_business_tools()
-query_faq = next(tool for tool in REGISTERED_TOOLS if tool.name == "query_faq")
-create_ticket = next(tool for tool in REGISTERED_TOOLS if tool.name == "create_ticket")

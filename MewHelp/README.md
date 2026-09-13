@@ -47,9 +47,13 @@ schema and seed the Chapter 2 FAQ records on every new database container.
 The compose file currently publishes MySQL on host port `3306`. If that port
 is occupied, first identify its owner with `docker ps --format 'table {{.Names}}\t{{.Ports}}'`.
 Do not run `docker compose down` in another project. Stop that known container
-only when it is safe to do so, or use a local copy of this project's compose
-configuration with an unused host port and set the matching `DATABASE_URL` in
-your untracked `.env` (for example, `127.0.0.1:3307`).
+only when it is safe to do so, or start this explicitly named Compose project
+on an unused host port and set the matching `DATABASE_URL` in your untracked
+`.env` (for example, `127.0.0.1:3307`):
+
+```bash
+make db-up MEWHELP_MYSQL_PORT=3307
+```
 
 Start LiteLLM on port 4000 and FastAPI on port 8000 together:
 
@@ -93,6 +97,25 @@ Run the unit tests:
 make test
 ```
 
+Validate the schema and seed data against the running project MySQL instance:
+
+```bash
+make db-up
+make test-mysql-integration
+```
+
+The integration target is opt-in and checks the initialized InnoDB tables,
+Chinese enums, conversation foreign keys, seeded return policy, and expected
+postage FAQ miss. It does not reset or remove the database, so it can be run
+directly when this project's MySQL container is already healthy. To test a
+project database published on another port, set the test-only
+`MEWHELP_MYSQL_INTEGRATION_URL` for the integration command.
+For example, after starting the project on port 3307, run:
+
+```bash
+make test-mysql-integration MEWHELP_MYSQL_PORT=3307
+```
+
 Run the frontend test suite and production build:
 
 ```bash
@@ -106,10 +129,11 @@ With `make dev` running in another terminal, run the extraction evaluation:
 make eval-extract
 ```
 
-The labelled Chapter 2 tool evaluation only needs the MySQL demo database. It
-uses labelled expectations and a deterministic injected planner rather than
-model-generated wording, and verifies the seed-data FAQ result as well as the
-planner's emitted tool selection:
+The labelled Chapter 2 tool evaluation requires the healthy MySQL demo database
+and the LiteLLM proxy/provider credentials configured for `make dev`. It calls
+the production conversation-scoped, tool-bound planning model for every case,
+then checks the selected tools and executed FAQ results without asserting on
+model-generated final-answer wording:
 
 ```bash
 make eval-tools
