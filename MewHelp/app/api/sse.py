@@ -9,6 +9,10 @@ def encode_delta(text: str) -> str:
     return _event({"delta": text})
 
 
+def encode_tool_status(name: str, state: str = "running") -> str:
+    return _event({"tool_status": {"name": name, "state": state}})
+
+
 def encode_done() -> str:
     return "data: [DONE]\n\n"
 
