@@ -45,6 +45,9 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
         "CAPTURE_PROXY_ENV": str(proxy_env),
         "CAPTURE_APP_ENV": str(app_env),
         "CAPTURE_PROXY_STOP": str(proxy_stop),
+        "SILICONFLOW_API_BASE": "https://inherited.example/v1",
+        "SILICONFLOW_API_KEY": "inherited-key",
+        "SILICONFLOW_MODEL": "inherited/model",
     }
     subprocess.run(["sh", "scripts/dev.sh"], cwd=project, env=environment, check=True)
 
@@ -55,4 +58,6 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
     assert proxy_values["LITELLM_API_KEY"] == "app-key"
     assert app_values["LITELLM_API_KEY"] == "app-key"
     assert "SILICONFLOW_API_KEY" not in app_values
+    assert "SILICONFLOW_API_BASE" not in app_values
+    assert "SILICONFLOW_MODEL" not in app_values
     assert proxy_stop.exists()

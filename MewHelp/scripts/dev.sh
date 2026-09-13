@@ -15,5 +15,6 @@ trap 'kill "$proxy_pid" 2>/dev/null || true; wait "$proxy_pid" 2>/dev/null || tr
   set -a
   . ./.env
   set +a
+  unset SILICONFLOW_API_BASE SILICONFLOW_API_KEY SILICONFLOW_MODEL
   exec uvicorn app.main:app --reload --port 8000
 )
