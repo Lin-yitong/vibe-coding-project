@@ -1,110 +1,71 @@
-# MewHelp Ch02 Function Calling Design
+# MewHelp Ch02 · Function Calling 工具链设计
 
-## Goal
+## 目标
 
-Extend the existing SSE customer-service chat so a model can select business
-tools, receive their results, and then stream a grounded final answer. The
-feature persists customer-service conversations and tool traces in MySQL.
+在现有 SSE 流式客服聊天中加入数据查询能力：模型自行选择业务工具，获得工具结果后，再流式输出有依据的最终回答；客服会话和完整工具轨迹保存到 MySQL。
 
-## Scope
+## 本章范围
 
-- FastAPI, SQLAlchemy 2.0 and a Docker Compose MySQL development database.
-- Four MySQL tables: `faq`, `conversations`, `messages`, and `tickets`.
-- Five LangChain `@tool` tools: order, product, logistics, FAQ, and ticket
-  creation.
-- One planning round per customer turn. That planning round may contain zero,
-  one, or several tool calls; after all selected tools finish, the model gets
-  their results once and emits its final response. It must not select further
-  tools from those results.
-- SSE status frames and frontend badges that show the selected tool trace.
-- TDD for code; a labelled evaluation set for prompts and seed-data behaviour.
+- 使用 FastAPI、SQLAlchemy 2.0、Docker Compose MySQL。
+- 新建 `faq`、`conversations`、`messages`、`tickets` 四张 MySQL 表。
+- 使用 LangChain `@tool` 定义订单、商品、物流、FAQ、创建工单五个工具。
+- 每条用户消息只经历一次工具规划：模型可在这一次规划中申请 0 个、1 个或多个工具；全部执行结果只回灌模型一次，模型据此输出最终回答；模型不会再根据工具结果申请新工具。
+- SSE 增加工具状态帧；前端在助手气泡中展示本轮工具轨迹徽章。
+- 代码走 TDD；纯 Prompt 与种子数据行为用标注评估集验证。
 
-## Out of Scope
+## 本章不做
 
-- Automatic multi-round Agent loops.
-- Vector retrieval, embeddings, RAG, or a vector database.
-- Real order, catalogue, or logistics integrations. The three lookup tools
-  return deterministic demonstration data.
-- User login. Every Ch02 conversation uses `user_id = "demo-user"`.
+- 多轮自动 Agent Loop。
+- 向量检索、Embedding、RAG 或向量数据库。
+- 真实订单、商品、物流系统集成。这三个查询工具只返回确定性的演示 mock 数据。
+- 用户登录。Ch02 固定使用 `user_id = "demo-user"`。
 
-## Database
+## 数据库
 
-Docker Compose runs an ephemeral MySQL instance. It has no persistent volume;
-`docker compose down -v` followed by `docker compose up` rebuilds tables and
-fixed seed data. Use MySQL `InnoDB` and `utf8mb4` throughout.
+Docker Compose 启动一个可重建的演示 MySQL：不挂持久化卷，执行 `docker compose down -v` 后再次启动会重新建表并灌入固定种子数据。全库统一使用 MySQL `InnoDB` 与 `utf8mb4`。
 
-SQLAlchemy models mirror the supplied DDL exactly:
+SQLAlchemy 模型严格对齐用户提供的 DDL：
 
-- `conversations`: unsigned bigint id, `user_id`, Chinese status enum
-  (`进行中`, `已转人工`, `已结束`), timestamps, and an index on `user_id`.
-- `messages`: unsigned bigint id, conversation FK, role enum
-  (`user`, `assistant`, `tool`), nullable text content, nullable JSON
-  `tool_calls`, nullable `tool_call_id`, timestamp, and a conversation index.
-- `faq`: unsigned bigint id, question, answer, category, timestamps, and a
-  category index.
-- `tickets`: `ticket_no` business primary key, conversation FK, description,
-  Chinese ticket type enum (`售后`, `投诉`, `咨询`), status enum
-  (`待处理`, `已处理`), timestamp, and a conversation index.
+- `conversations`：无符号 bigint 主键、`user_id`、中文状态枚举（`进行中`、`已转人工`、`已结束`）、创建/更新时间、`user_id` 索引。
+- `messages`：无符号 bigint 主键、会话外键、角色枚举（`user`、`assistant`、`tool`）、可空正文、可空 JSON `tool_calls`、可空 `tool_call_id`、创建时间、会话索引。
+- `faq`：无符号 bigint 主键、问题、答案、分类、创建/更新时间、分类索引。
+- `tickets`：业务主键 `ticket_no`、会话外键、问题描述、中文工单类型枚举（`售后`、`投诉`、`咨询`）、状态枚举（`待处理`、`已处理`）、创建时间、会话索引。
 
-The first request with a browser `session_id` creates one `conversations` row
-for `demo-user`; later requests reuse the mapped conversation. The mapping is
-held by the application for this demonstration release. A future authenticated
-release replaces `demo-user` and makes the mapping durable.
+浏览器第一次以某个 `session_id` 发消息时，后端为 `demo-user` 创建一条 `conversations` 记录；后续相同 `session_id` 复用该数据库会话。Ch02 的映射仅保存在应用内存中；接入登录后的章节再替换为真实用户 ID 与持久化映射。
 
-Seed FAQ data includes an answer for “退货政策是什么”. It deliberately has no
-keyword match for “邮费是多少”, so the expected Ch02 evaluation records the
-SQL-LIKE miss rather than hiding it.
+FAQ 种子数据必须包含“退货政策是什么”的答案，且故意不包含“邮费是多少”的关键词匹配项，确保评估能记录 SQL `LIKE` 的预期漏召回。
 
-## Tool Contracts
+## 工具契约
 
-All tools use `@tool(args_schema=...)` with explicit Pydantic inputs and are
-registered in a whitelist registry.
+五个工具均使用 `@tool(args_schema=...)` 和显式 Pydantic 参数模型，并注册到白名单注册中心。
 
-| Tool | Input | Result source |
+| 工具 | 参数 | 数据来源 |
 | --- | --- | --- |
-| `query_order` | `order_no` | Deterministic mock order data |
-| `query_product` | `product_name` | Deterministic mock product data |
-| `query_logistics` | `order_no` | Deterministic mock logistics data |
-| `query_faq` | `keyword` | `faq` SQL `LIKE` query |
-| `create_ticket` | `description`, `ticket_type` | Insert into `tickets` |
+| `query_order` | `order_no` | 确定性的订单 mock 数据 |
+| `query_product` | `product_name` | 确定性的商品 mock 数据 |
+| `query_logistics` | `order_no` | 确定性的物流 mock 数据 |
+| `query_faq` | `keyword` | 查询 `faq` 表的 SQL `LIKE` |
+| `create_ticket` | `description`、`ticket_type` | 向 `tickets` 表插入工单 |
 
-`ticket_type` is exactly `售后`, `投诉`, or `咨询`; ambiguous cases use `咨询`.
-The mock tools must generate stable answers from their input rather than using
-unseeded randomness, so tests and demonstrations remain reproducible.
+`ticket_type` 只允许 `售后`、`投诉`、`咨询`；无法归类时使用 `咨询`。三个 mock 工具根据输入稳定地产生数据，不使用无种子的随机值，以保证测试和演示可复现。
 
-The registry validates tool name and arguments, enforces one timeout policy
-and one retry after a transient execution failure, and returns a structured,
-safe error result after failure. It never exposes exception stack traces.
+注册中心负责验证工具名称和参数、统一执行超时策略、在瞬态失败后重试一次。失败耗尽时返回结构化且安全的工具错误结果，不暴露异常堆栈。
 
-## Chat and Persistence Flow
+## 聊天与持久化流程
 
-1. `POST /api/chat` receives `session_id` and message.
-2. The conversation service creates or loads the database conversation, then
-   writes the user `messages` row.
-3. The ChatOpenAI model is bound to the five registered tools and receives the
-   existing system prompt plus the current customer message.
-4. Its `AIMessage.tool_calls` contains zero or more requests. The application
-   writes an assistant row whose `tool_calls` JSON preserves those requests.
-5. For each call in returned order, the registry validates and executes the
-   registered tool. It writes a `tool` message with matching `tool_call_id`.
-6. Before final text starts, SSE sends a `tool_status` frame naming each tool
-   used in this turn. The frontend adds these names to the active assistant
-   bubble as badges.
-7. The assistant request and all `ToolMessage` results are returned to the
-   model once. Its final natural-language answer streams as existing `delta`
-   frames, then `[DONE]`; the completed assistant text is written to
-   `messages`.
+1. `POST /api/chat` 接收 `session_id` 与用户消息。
+2. 会话服务创建或获取数据库会话，并写入一条 `user` 消息。
+3. 将 ChatOpenAI 与五个注册工具绑定，发送现有 System Prompt 与当前用户消息。
+4. 模型的 `AIMessage.tool_calls` 可包含 0 个或多个调用申请。后端写入一条 `assistant` 消息，其 `tool_calls` JSON 原样保存申请内容。
+5. 按模型返回顺序，对每个工具调用做校验和执行；每个执行结果写入一条 `tool` 消息，携带对应的 `tool_call_id`。
+6. 在最终文本开始前，SSE 为本轮每个工具发送一条 `tool_status` 帧；前端据此将工具名称添加为正在生成的助手气泡徽章。
+7. 将工具申请和全部 `ToolMessage` 结果一次性回灌模型；最终自然语言答案沿用 `delta` 帧流式输出，随后发送 `[DONE]`；完成文本写入一条最终 `assistant` 消息。
 
-If no tool is selected, the endpoint retains the ordinary Ch01 streaming
-path and writes only user and final assistant messages. A tool execution error
-is returned to the final model as a safe tool result so it can explain the
-next step; an initial model failure remains HTTP 502. A failure while streaming
-the final answer emits the existing SSE error frame and does not write a
-completed assistant answer.
+若模型未选择工具，接口保留 Ch01 的普通流式回答路径，仅写用户和最终助手两条消息。工具执行失败时，安全错误结果会回灌模型，让模型说明下一步；首次模型调用失败仍返回 HTTP 502。最终回答流中发生异常时，发送既有 SSE error 帧，且不写入“已完成”的最终助手消息。
 
-## SSE and UI Contract
+## SSE 与前端契约
 
-Existing frames remain unchanged:
+既有帧格式保持不变：
 
 ```text
 data: {"delta":"..."}
@@ -112,37 +73,24 @@ data: {"delta":"..."}
 data: [DONE]
 ```
 
-New status frames are sent before the first final `delta`:
+新增状态帧，且必须在首个最终 `delta` 前发送：
 
 ```text
 data: {"tool_status":{"name":"query_logistics","state":"running"}}
 ```
 
-The frontend parser delivers the tool name to `App.vue`. The same assistant
-bubble that receives deltas displays compact Chinese tool badges. The page
-uses the existing pixel visual language. This focused frontend work follows
-the requested Vibe Coding exception rather than brainstorm, TDD, or code
-review process.
+前端解析器把工具名称传给 `App.vue`。正在生成的助手气泡展示简洁的中文工具徽章，同时保留逐字渲染和既有像素风格。本段前端改造遵循用户指定的 Vibe Coding 例外：不走脑暴、TDD 或代码审查流程。
 
-## Verification
+## 验证
 
-Code tests cover ORM models/services, registry validation, timeout/retry,
-FAQ hits and misses, ticket insertion, persisted message ordering, multi-tool
-tool-call handling, and `tool_status`/delta/DONE SSE ordering. Integration
-tests use the Docker MySQL service.
+代码测试覆盖 ORM 模型与服务、注册中心校验、超时与重试、FAQ 命中与未命中、工单写入、消息持久化顺序、多工具调用处理，以及 `tool_status` / `delta` / `DONE` 的 SSE 顺序。集成测试连接 Docker MySQL。
 
-Prompt and data behaviour uses a labelled evaluation set with these minimum
-cases:
+Prompt 与种子数据行为使用标注评估集，最少覆盖：
 
-1. “订单 1001 的物流到哪了” selects the required order/logistics tools and
-   answers from their returned mock data.
-2. “退货政策是什么” uses `query_faq` and returns the seeded answer.
-3. “邮费是多少” produces the expected FAQ miss. This is recorded as a known
-   SQL-LIKE recall limitation for the next chapter, not as a test failure.
+1. “订单 1001 的物流到哪了”：选择必要的订单/物流工具，并根据 mock 返回值作答。
+2. “退货政策是什么”：调用 `query_faq`，返回种子数据中的答案。
+3. “邮费是多少”：产生预期的 FAQ 未命中。该结果记录为 SQL `LIKE` 的已知召回限制，留给下一章升级，而非测试失败。
 
-## Development Record
+## 开发留痕
 
-`MewHelp/dev-notes/ch02.md` is appended after design, Context7 research,
-database setup, tool infrastructure, chat/UI integration, evaluation, and
-final verification. It contains commands, decisions, findings, and test
-results, but never API keys or other secrets.
+`MewHelp/dev-notes/ch02.md` 会在设计、Context7 调研、数据库初始化、工具基础设施、聊天/页面接入、评估和最终验证后持续追加，记录命令、决策、发现和测试结果；不得写入 API Key 或其他密钥。
