@@ -1,7 +1,7 @@
 model_list:
   - model_name: mewhelp-after-sales
     litellm_params:
-      model: siliconflow/os.environ/SILICONFLOW_MODEL
+      model: os.environ/SILICONFLOW_MODEL
       api_base: os.environ/SILICONFLOW_API_BASE
       api_key: os.environ/SILICONFLOW_API_KEY
 litellm_settings:

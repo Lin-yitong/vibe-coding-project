@@ -22,6 +22,8 @@ Use the two environment files for separate concerns:
   key is also the proxy's master key.
 - `.litellm.env` is the LiteLLM proxy's upstream-provider configuration. Set
   `SILICONFLOW_API_BASE`, `SILICONFLOW_API_KEY`, and `SILICONFLOW_MODEL` there.
+  `SILICONFLOW_MODEL` must contain the complete LiteLLM model identifier,
+  including its provider prefix, for example `siliconflow/Qwen/Qwen3-8B`.
 
 Keep `LITELLM_BASE_URL` at `http://localhost:4000/v1`. Both local files are
 ignored by Git. `make dev` loads both files for the LiteLLM subprocess, but

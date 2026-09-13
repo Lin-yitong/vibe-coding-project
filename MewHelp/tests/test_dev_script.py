@@ -20,7 +20,7 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
     (project / ".litellm.env").write_text(
         "SILICONFLOW_API_BASE=https://upstream.example/v1\n"
         "SILICONFLOW_API_KEY=upstream-key\n"
-        "SILICONFLOW_MODEL=example/model\n"
+        "SILICONFLOW_MODEL=siliconflow/example-model\n"
     )
     proxy_env = tmp_path / "proxy.env"
     app_env = tmp_path / "app.env"
@@ -47,7 +47,7 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
         "CAPTURE_PROXY_STOP": str(proxy_stop),
         "SILICONFLOW_API_BASE": "https://inherited.example/v1",
         "SILICONFLOW_API_KEY": "inherited-key",
-        "SILICONFLOW_MODEL": "inherited/model",
+        "SILICONFLOW_MODEL": "siliconflow/inherited-model",
     }
     subprocess.run(["sh", "scripts/dev.sh"], cwd=project, env=environment, check=True)
 
