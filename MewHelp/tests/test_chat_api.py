@@ -35,7 +35,9 @@ class FakeSessionStore:
 
 
 class FakeModel:
-    def __init__(self, chunks: list[str], error: Exception | None = None) -> None:
+    def __init__(
+        self, chunks: list[str | AIMessageChunk], error: Exception | None = None
+    ) -> None:
         self.chunks = chunks
         self.error = error
         self.calls: list[list[BaseMessage]] = []
@@ -48,7 +50,10 @@ class FakeModel:
     ) -> AsyncIterator[AIMessageChunk]:
         self.calls.append(list(messages))
         for chunk in self.chunks:
-            yield AIMessageChunk(content=chunk)
+            if isinstance(chunk, AIMessageChunk):
+                yield chunk
+            else:
+                yield AIMessageChunk(content=chunk)
         if self.error is not None:
             raise self.error
 
@@ -117,6 +122,66 @@ def test_initial_upstream_error_returns_bad_gateway(store: FakeSessionStore) -> 
 
     assert response.status_code == 502
     assert response.json() == {"detail": "upstream_error"}
+
+
+def test_metadata_chunks_before_text_are_skipped_from_sse_and_history(
+    store: FakeSessionStore,
+) -> None:
+    """Catch forwarding reasoning metadata instead of the assistant text delta."""
+    metadata_then_text = FakeModel(
+        [
+            AIMessageChunk(
+                content="", additional_kwargs={"reasoning_content": "internal reasoning"}
+            ),
+            AIMessageChunk(content="", additional_kwargs={"role": "assistant"}),
+            AIMessageChunk(content="您好"),
+        ]
+    )
+    app.dependency_overrides[get_session_store] = lambda: store
+    app.dependency_overrides[get_chat_model] = lambda: metadata_then_text
+    with TestClient(app) as client:
+        response = client.post("/api/chat", json={"session_id": "s", "message": "退款"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.text == 'data: {"delta":"您好"}\n\ndata: [DONE]\n\n'
+    assert store.pairs_for("s") == [("退款", "您好")]
+
+
+def test_failure_after_metadata_before_text_returns_bad_gateway(
+    store: FakeSessionStore,
+) -> None:
+    """Catch committing HTTP 200 before an assistant text delta arrives."""
+    metadata_then_failure = FakeModel(
+        [AIMessageChunk(content="", additional_kwargs={"reasoning_content": "internal"})],
+        RuntimeError("provider unavailable"),
+    )
+    app.dependency_overrides[get_session_store] = lambda: store
+    app.dependency_overrides[get_chat_model] = lambda: metadata_then_failure
+    with TestClient(app) as client:
+        response = client.post("/api/chat", json={"session_id": "s", "message": "退款"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "upstream_error"}
+
+
+def test_metadata_only_completed_stream_emits_done_and_commits_empty_reply(
+    store: FakeSessionStore,
+) -> None:
+    """Catch treating a successfully completed no-text stream as an upstream failure."""
+    metadata_only = FakeModel(
+        [AIMessageChunk(content="", additional_kwargs={"reasoning_content": "internal"})]
+    )
+    app.dependency_overrides[get_session_store] = lambda: store
+    app.dependency_overrides[get_chat_model] = lambda: metadata_only
+    with TestClient(app) as client:
+        response = client.post("/api/chat", json={"session_id": "s", "message": "退款"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.text == "data: [DONE]\n\n"
+    assert store.pairs_for("s") == [("退款", "")]
 
 
 def test_second_call_receives_committed_history(

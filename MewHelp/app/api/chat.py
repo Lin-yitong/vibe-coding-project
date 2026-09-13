@@ -17,6 +17,11 @@ from app.schemas.chat import ChatRequest
 router = APIRouter()
 
 
+def _assistant_text(chunk: object) -> str | None:
+    content = getattr(chunk, "content", "")
+    return content if isinstance(content, str) and content else None
+
+
 @lru_cache(maxsize=1)
 def get_session_store() -> SessionStore:
     return SessionStore(token_budget=Settings().token_budget)
@@ -41,29 +46,28 @@ async def stream_chat(
     )
     try:
         stream = model.astream(messages)
-        first_chunk = await anext(stream)
+        first_text: str | None = None
+        async for chunk in stream:
+            first_text = _assistant_text(chunk)
+            if first_text is not None:
+                break
     except Exception as exc:
         raise HTTPException(status_code=502, detail="upstream_error") from exc
 
     async def events() -> AsyncIterator[str]:
         fragments: list[str] = []
 
-        def encode_chunk(chunk: object) -> str | None:
-            content = getattr(chunk, "content", "")
-            if not isinstance(content, str) or not content:
-                return None
-            fragments.append(content)
-            return encode_delta(content)
-
-        first_event = encode_chunk(first_chunk)
-        if first_event is not None:
-            yield first_event
+        if first_text is not None:
+            fragments.append(first_text)
+            yield encode_delta(first_text)
 
         try:
             async for chunk in stream:
-                event = encode_chunk(chunk)
-                if event is not None:
-                    yield event
+                content = _assistant_text(chunk)
+                if content is None:
+                    continue
+                fragments.append(content)
+                yield encode_delta(content)
         except Exception as exc:
             yield encode_error(str(exc))
             return
