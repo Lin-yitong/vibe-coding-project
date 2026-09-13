@@ -41,12 +41,45 @@ make dev
 
 OpenAPI is available at `http://localhost:8000/openapi.json`.
 
+## Chat UI
+
+Install the frontend dependencies once:
+
+```bash
+cd frontend
+npm install
+```
+
+Then start the API and the Vite development server in separate terminals from
+the `MewHelp` directory:
+
+```bash
+make dev
+```
+
+```bash
+make frontend-dev
+```
+
+Open the local URL printed by Vite (usually `http://localhost:5173`) in your
+browser. To manually accept the chat UI, send a question and confirm the
+assistant response grows while it streams; send a follow-up in the same
+conversation and confirm it retains the prior context; then start a new
+conversation and confirm the two message lists do not mix.
+
 ## Test and evaluate
 
 Run the unit tests:
 
 ```bash
 make test
+```
+
+Run the frontend test suite and production build:
+
+```bash
+make frontend-test
+make frontend-build
 ```
 
 With `make dev` running in another terminal, run the extraction evaluation:
