@@ -15,19 +15,14 @@ def create_database_engine(database_url: str | None = None) -> Engine:
     return create_engine(database_url or _database_url(), pool_pre_ping=True)
 
 
-engine: Engine | None = None
-SessionLocal = sessionmaker(autoflush=False, autocommit=False, expire_on_commit=False)
-
-
-def get_database_engine() -> Engine:
-    global engine
-    if engine is None:
-        engine = create_database_engine()
-    return engine
+engine = create_database_engine()
+SessionLocal = sessionmaker(
+    bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+)
 
 
 def get_db_session() -> Generator[Session, None, None]:
-    session = SessionLocal(bind=get_database_engine())
+    session = SessionLocal()
     try:
         yield session
     finally:

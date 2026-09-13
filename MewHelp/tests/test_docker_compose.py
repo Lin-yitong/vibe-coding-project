@@ -10,6 +10,8 @@ def test_compose_has_ephemeral_mysql_and_healthcheck() -> None:
     assert "mysql:8" in compose
     assert "healthcheck:" in compose
     assert "./db/init:/docker-entrypoint-initdb.d:ro" in compose
+    # Service-level volumes is required for the read-only init bind mount; a
+    # top-level volumes block would declare prohibited persistent storage.
     assert "\nvolumes:\n" not in compose
 
 
