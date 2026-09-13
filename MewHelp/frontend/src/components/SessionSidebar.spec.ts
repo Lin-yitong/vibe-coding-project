@@ -32,4 +32,13 @@ describe('SessionSidebar', () => {
     expect(wrapper.emitted('new')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('removes session controls when the sidebar is closed', () => {
+    const wrapper = mount(SessionSidebar, {
+      props: { sessions, activeSessionId: 'order-help', open: false },
+    })
+
+    expect(wrapper.find('aside').exists()).toBe(false)
+    expect(wrapper.find('button').exists()).toBe(false)
+  })
 })

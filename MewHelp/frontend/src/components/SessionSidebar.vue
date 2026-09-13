@@ -15,7 +15,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <aside class="session-sidebar" :class="{ 'session-sidebar--open': open }" :aria-hidden="!open">
+  <aside v-if="open" class="session-sidebar">
     <div class="session-sidebar__header">
       <h2>会话记录</h2>
       <button data-action="close-sidebar" class="session-sidebar__close" type="button" aria-label="关闭会话列表" @click="emit('close')">
