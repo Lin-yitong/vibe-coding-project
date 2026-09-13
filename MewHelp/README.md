@@ -1,4 +1,4 @@
-# MewHelp Ch01
+# MewHelp Ch02
 
 MewHelp is a FastAPI after-sales chat service backed by a local LiteLLM proxy.
 
@@ -32,6 +32,24 @@ loads only `.env` for FastAPI. The application code only knows LiteLLM;
 SiliconFlow settings never enter the FastAPI process.
 
 ## Run locally
+
+Start the reproducible MySQL demo database before starting the API:
+
+```bash
+docker compose up -d
+# Equivalent Make target: make db-up
+docker compose ps
+```
+
+Wait until MySQL reports `healthy`. The initialization scripts create the
+schema and seed the Chapter 2 FAQ records on every new database container.
+
+The compose file currently publishes MySQL on host port `3306`. If that port
+is occupied, first identify its owner with `docker ps --format 'table {{.Names}}\t{{.Ports}}'`.
+Do not run `docker compose down` in another project. Stop that known container
+only when it is safe to do so, or use a local copy of this project's compose
+configuration with an unused host port and set the matching `DATABASE_URL` in
+your untracked `.env` (for example, `127.0.0.1:3307`).
 
 Start LiteLLM on port 4000 and FastAPI on port 8000 together:
 
@@ -88,6 +106,30 @@ With `make dev` running in another terminal, run the extraction evaluation:
 make eval-extract
 ```
 
+The labelled Chapter 2 tool evaluation only needs the MySQL demo database. It
+uses fixed tool-call labels rather than model-generated wording, and verifies
+the seed-data FAQ result as well as tool selection:
+
+```bash
+make eval-tools
+```
+
+It reports three cases: logistics for order `1001`, a matching return-policy
+FAQ, and the `faq-miss-postage` case. The postage case is a successful expected
+miss and explicitly records the known `SQL LIKE keyword recall` limitation.
+
+## Reset the demo database
+
+These commands destroy only this Compose project's MySQL container and its
+ephemeral data, then rerun the schema and seed scripts:
+
+```bash
+make db-reset
+```
+
+Use `make db-down` when you want to remove the demo database without starting
+it again. Do not use either command against another project's Compose setup.
+
 ## Manual acceptance
 
 With `.env` and `.litellm.env` configured and `make dev` running, call the chat endpoint:
@@ -111,3 +153,25 @@ curl -sS -X POST http://localhost:8000/api/extract \
 ```
 
 The response should be schema-valid JSON.
+
+## Browser acceptance for Chapter 2
+
+With MySQL healthy, `.env` and `.litellm.env` configured, and `make dev`
+running, start the frontend in another terminal:
+
+```bash
+make frontend-dev
+```
+
+Open the Vite URL (normally `http://localhost:5173`) and verify these flows:
+
+1. Send `请查询订单 1001 的物流。`; the streamed assistant response should show a
+   查询物流 badge.
+2. Send `退货政策是什么？`; it should show a 查询常见问题 badge and use the seeded
+   return-policy FAQ.
+3. Send `邮费是多少？`; it should show a 查询常见问题 badge, while the FAQ lookup
+   has no match. This is the documented Chapter 2 recall limitation, not a
+   browser acceptance failure.
+
+For a clean repeat, run `make db-reset`, restart `make dev` if it has an open
+database connection, and repeat the three messages in a new conversation.

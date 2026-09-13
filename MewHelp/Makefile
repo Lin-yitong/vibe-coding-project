@@ -1,4 +1,4 @@
-.PHONY: dev test eval-extract frontend-dev frontend-test frontend-build db-up db-down db-reset
+.PHONY: dev test eval-extract eval-tools frontend-dev frontend-test frontend-build db-up db-down db-reset
 
 dev:
 	./scripts/dev.sh
@@ -8,6 +8,9 @@ test:
 
 eval-extract:
 	python evals/run_extract_eval.py
+
+eval-tools:
+	PYTHONPATH=. python evals/run_tool_eval.py
 
 db-up:
 	docker compose up -d
