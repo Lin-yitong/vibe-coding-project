@@ -1,0 +1,47 @@
+[
+  {
+    "name": "refund",
+    "text": "订单 RF100 已收到，想退款。",
+    "expected": {
+      "order_id": "RF100",
+      "request_type": "refund",
+      "expected_solution": "退款"
+    }
+  },
+  {
+    "name": "exchange",
+    "text": "订单 SF1 左耳无声，想换货。",
+    "expected": {
+      "order_id": "SF1",
+      "request_type": "exchange",
+      "expected_solution": "换货"
+    }
+  },
+  {
+    "name": "repair",
+    "text": "订单 RP88 的咖啡机漏水，请安排维修。",
+    "expected": {
+      "order_id": "RP88",
+      "request_type": "repair",
+      "expected_solution": "维修"
+    }
+  },
+  {
+    "name": "complaint",
+    "text": "订单 CP9 的客服态度很差，我要投诉。",
+    "expected": {
+      "order_id": "CP9",
+      "request_type": "complaint",
+      "expected_solution": "投诉"
+    }
+  },
+  {
+    "name": "ambiguous_without_order_id",
+    "text": "耳机有问题，想处理。",
+    "expected": {
+      "order_id": null,
+      "request_type": "other",
+      "expected_solution": null
+    }
+  }
+]

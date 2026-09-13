@@ -1,0 +1,105 @@
+:root {
+  font-family: "Courier New", ui-monospace, monospace;
+  color: var(--ink);
+  background: var(--cream);
+  --orange: #ff9b4a;
+  --cream: #fff4dc;
+  --paper: #fffdfa;
+  --ink: #2d1b35;
+  --grid-line: #eacda6;
+  --shadow: 4px 4px 0 var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+  background-color: var(--cream);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #3ec66a;
+  outline-offset: 2px;
+}
+
+.mewhelp-app {
+  width: min(100%, 90rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--cream);
+  border-inline: 3px solid var(--ink);
+}
+
+.mewhelp-app__workspace {
+  display: grid;
+  grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr);
+  min-height: calc(100vh - 5.2rem);
+}
+
+.mewhelp-app__chat {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: calc(100vh - 5.2rem);
+  background: var(--paper);
+}
+
+.mewhelp-app__messages {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  padding: clamp(1rem, 3vw, 2.25rem);
+  background-color: var(--paper);
+  background-image: radial-gradient(var(--grid-line) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.mewhelp-app__empty {
+  max-width: 28rem;
+  margin: auto;
+  padding: 1rem;
+  text-align: center;
+  background: var(--cream);
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 767px) {
+  .mewhelp-app {
+    border-inline: 0;
+  }
+
+  .mewhelp-app__workspace {
+    display: block;
+    min-height: calc(100vh - 4.7rem);
+  }
+
+  .mewhelp-app__workspace > .session-sidebar {
+    position: fixed;
+    z-index: 10;
+    inset: 0 auto 0 0;
+    width: min(86vw, 21rem);
+    padding-top: 5.2rem;
+    border-right: 3px solid var(--ink);
+    box-shadow: var(--shadow);
+  }
+
+  .mewhelp-app__chat {
+    min-height: calc(100vh - 4.7rem);
+  }
+}
