@@ -2,15 +2,6 @@
   {
     "id": "logistics-1001",
     "message": "请查询订单 1001 的物流。",
-    "tool_calls": [
-      {
-        "id": "eval-logistics-1001",
-        "name": "query_logistics",
-        "args": {
-          "order_no": "1001"
-        }
-      }
-    ],
     "expected_tool_names": [
       "query_logistics"
     ],
@@ -19,15 +10,6 @@
   {
     "id": "faq-return-policy",
     "message": "退货政策是什么？",
-    "tool_calls": [
-      {
-        "id": "eval-faq-return-policy",
-        "name": "query_faq",
-        "args": {
-          "keyword": "退货政策"
-        }
-      }
-    ],
     "expected_tool_names": [
       "query_faq"
     ],
@@ -36,15 +18,6 @@
   {
     "id": "faq-miss-postage",
     "message": "邮费是多少？",
-    "tool_calls": [
-      {
-        "id": "eval-faq-postage",
-        "name": "query_faq",
-        "args": {
-          "keyword": "邮费"
-        }
-      }
-    ],
     "expected_tool_names": [
       "query_faq"
     ],

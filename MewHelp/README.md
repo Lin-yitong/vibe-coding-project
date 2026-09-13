@@ -17,9 +17,9 @@ cp .litellm.env.example .litellm.env
 
 Use the two environment files for separate concerns:
 
-- `.env` is the FastAPI application's configuration. It contains only
-  `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `TOKEN_BUDGET`; its LiteLLM API
-  key is also the proxy's master key.
+- `.env` is the FastAPI application's configuration. It contains
+  `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `TOKEN_BUDGET`, and `DATABASE_URL`;
+  its LiteLLM API key is also the proxy's master key.
 - `.litellm.env` is the LiteLLM proxy's upstream-provider configuration. Set
   `SILICONFLOW_API_BASE`, `SILICONFLOW_API_KEY`, and `SILICONFLOW_MODEL` there.
   `SILICONFLOW_MODEL` must contain the complete LiteLLM model identifier,
@@ -107,8 +107,9 @@ make eval-extract
 ```
 
 The labelled Chapter 2 tool evaluation only needs the MySQL demo database. It
-uses fixed tool-call labels rather than model-generated wording, and verifies
-the seed-data FAQ result as well as tool selection:
+uses labelled expectations and a deterministic injected planner rather than
+model-generated wording, and verifies the seed-data FAQ result as well as the
+planner's emitted tool selection:
 
 ```bash
 make eval-tools
