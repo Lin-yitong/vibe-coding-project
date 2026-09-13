@@ -77,12 +77,14 @@ async function sendMessage(content: string): Promise<void> {
     role: 'user',
     content,
     status: 'complete',
+    toolNames: [],
   }
   const streamingMessage: ChatMessage = {
     id: createSessionId(),
     role: 'assistant',
     content: '',
     status: 'streaming',
+    toolNames: [],
   }
 
   session.messages.push(userMessage, streamingMessage)
@@ -97,6 +99,12 @@ async function sendMessage(content: string): Promise<void> {
       onDelta(delta) {
         assistantMessage.content += delta
         void scrollToLatestMessage()
+      },
+      onToolStatus(name) {
+        if (!assistantMessage.toolNames.includes(name)) {
+          assistantMessage.toolNames.push(name)
+          void scrollToLatestMessage()
+        }
       },
       onDone() {
         assistantMessage.status = 'complete'

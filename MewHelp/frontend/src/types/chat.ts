@@ -7,6 +7,7 @@ export interface ChatMessage {
   role: ChatRole
   content: string
   status: ChatMessageStatus
+  toolNames: string[]
 }
 
 export interface ChatSession {

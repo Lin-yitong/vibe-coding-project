@@ -5,6 +5,7 @@ export interface ChatRequest {
 
 export interface ChatStreamHandlers {
   onDelta: (delta: string) => void
+  onToolStatus: (name: string) => void
   onDone: () => void
   onError: (message: string) => void
 }
@@ -41,6 +42,11 @@ function processFrame(frame: string, handlers: ChatStreamHandlers): FrameResult 
 
     if (typeof payload.delta === 'string') {
       handlers.onDelta(payload.delta)
+      continue
+    }
+
+    if (isRecord(payload.tool_status) && typeof payload.tool_status.name === 'string') {
+      handlers.onToolStatus(payload.tool_status.name)
       continue
     }
 
