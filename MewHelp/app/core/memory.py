@@ -23,6 +23,8 @@ class SessionStore:
             )
             if count_tokens(candidate) <= self.token_budget:
                 selected_pairs = candidate_pairs
+            else:
+                break
 
         return self._compose_messages(system_message, selected_pairs, current_message)
 
