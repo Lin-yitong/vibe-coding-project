@@ -40,7 +40,16 @@ function restoreSessions(): ChatSession[] {
     }
 
     const parsed: unknown = JSON.parse(stored)
-    return Array.isArray(parsed) && parsed.every(isChatSession) ? parsed : []
+    if (!Array.isArray(parsed) || !parsed.every(isChatSession)) {
+      return []
+    }
+
+    return parsed.map((session) => ({
+      ...session,
+      messages: session.messages.map((message) =>
+        message.status === 'streaming' ? { ...message, status: 'error' as const } : message,
+      ),
+    }))
   } catch {
     return []
   }
@@ -89,6 +98,7 @@ export function useChatSessions() {
   }
 
   watch(sessions, persistSessions, { deep: true, flush: 'sync' })
+  persistSessions()
 
   if (sessions.value.length === 0) {
     createSession()

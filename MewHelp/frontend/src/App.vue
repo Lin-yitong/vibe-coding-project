@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { streamChat } from './api/chatClient'
 import ChatComposer from './components/ChatComposer.vue'
 import ChatHeader from './components/ChatHeader.vue'
@@ -10,13 +10,31 @@ import type { ChatMessage, ChatSession } from './types/chat'
 
 const { activeSessionId, activateSession, createSession, currentSession, sessions } = useChatSessions()
 const isBusy = ref(false)
-const sidebarOpen = ref(true)
 const messageList = ref<HTMLElement | null>(null)
 const messages = computed(() => currentSession.value?.messages ?? [])
 
 function isNarrowScreen(): boolean {
   return window.matchMedia?.('(max-width: 767px)').matches ?? false
 }
+
+const isNarrowViewport = ref(isNarrowScreen())
+const sidebarOpen = ref(!isNarrowViewport.value)
+const isSidebarOpen = computed(() => !isNarrowViewport.value || sidebarOpen.value)
+let sidebarMediaQuery: MediaQueryList | undefined
+
+function updateViewport(event: MediaQueryListEvent): void {
+  isNarrowViewport.value = event.matches
+  sidebarOpen.value = !event.matches
+}
+
+onMounted(() => {
+  sidebarMediaQuery = window.matchMedia?.('(max-width: 767px)')
+  sidebarMediaQuery?.addEventListener?.('change', updateViewport)
+})
+
+onBeforeUnmount(() => {
+  sidebarMediaQuery?.removeEventListener?.('change', updateViewport)
+})
 
 async function scrollToLatestMessage(): Promise<void> {
   await nextTick()
@@ -34,7 +52,7 @@ function updateSessionSummary(session: ChatSession, message: string): void {
 
 function createNewSession(): void {
   createSession()
-  if (isNarrowScreen()) {
+  if (isNarrowViewport.value) {
     sidebarOpen.value = false
   }
   void scrollToLatestMessage()
@@ -42,7 +60,7 @@ function createNewSession(): void {
 
 function selectSession(id: string): void {
   activateSession(id)
-  if (isNarrowScreen()) {
+  if (isNarrowViewport.value) {
     sidebarOpen.value = false
   }
   void scrollToLatestMessage()
@@ -78,7 +96,6 @@ async function sendMessage(content: string): Promise<void> {
     {
       onDelta(delta) {
         assistantMessage.content += delta
-        session.preview = assistantMessage.content.slice(0, 36) || content.slice(0, 36)
         void scrollToLatestMessage()
       },
       onDone() {
@@ -91,26 +108,38 @@ async function sendMessage(content: string): Promise<void> {
         assistantMessage.content = assistantMessage.content
           ? `${assistantMessage.content}\n\n${message}`
           : message
-        session.preview = assistantMessage.content.slice(0, 36)
         isBusy.value = false
         void scrollToLatestMessage()
       },
     },
   )
 }
+
+function toggleSidebar(): void {
+  if (isNarrowViewport.value) {
+    sidebarOpen.value = !sidebarOpen.value
+  }
+}
+
+function closeSidebar(): void {
+  if (isNarrowViewport.value) {
+    sidebarOpen.value = false
+  }
+}
 </script>
 
 <template>
   <main class="mewhelp-app">
-    <ChatHeader @new="createNewSession" @toggle-sessions="sidebarOpen = !sidebarOpen" />
+    <ChatHeader @new="createNewSession" @toggle-sessions="toggleSidebar" />
     <div class="mewhelp-app__workspace">
       <SessionSidebar
         :sessions="sessions"
         :active-session-id="activeSessionId"
-        :open="sidebarOpen"
+        :open="isSidebarOpen"
+        :closable="isNarrowViewport"
         @new="createNewSession"
         @select="selectSession"
-        @close="sidebarOpen = false"
+        @close="closeSidebar"
       />
 
       <section class="mewhelp-app__chat" aria-label="客服对话">

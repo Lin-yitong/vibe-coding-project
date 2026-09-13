@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { ChatSession } from '../types/chat'
 
-defineProps<{
+withDefaults(defineProps<{
   sessions: ChatSession[]
   activeSessionId: string | null
   open: boolean
-}>()
+  closable?: boolean
+}>(), {
+  closable: true,
+})
 
 const emit = defineEmits<{
   select: [id: string]
@@ -18,7 +21,7 @@ const emit = defineEmits<{
   <aside v-if="open" class="session-sidebar">
     <div class="session-sidebar__header">
       <h2>会话记录</h2>
-      <button data-action="close-sidebar" class="session-sidebar__close" type="button" aria-label="关闭会话列表" @click="emit('close')">
+      <button v-if="closable" data-action="close-sidebar" class="session-sidebar__close" type="button" aria-label="关闭会话列表" @click="emit('close')">
         ×
       </button>
     </div>

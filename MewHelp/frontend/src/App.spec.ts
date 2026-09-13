@@ -16,6 +16,7 @@ async function send(wrapper: ReturnType<typeof mount>, message: string): Promise
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('App', () => {
@@ -66,5 +67,37 @@ describe('App', () => {
 
     expect(wrapper.findAll('[aria-label="用户消息"]')).toHaveLength(1)
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')).toHaveLength(2)
+  })
+
+  it('starts with the sidebar collapsed on narrow screens and opens it from the header', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
+    const wrapper = mount(App)
+
+    expect(wrapper.find('.session-sidebar').exists()).toBe(false)
+
+    await wrapper.get('[aria-label="打开会话列表"]').trigger('click')
+
+    expect(wrapper.find('.session-sidebar').exists()).toBe(true)
+  })
+
+  it('keeps the sidebar visible without a close action on desktop', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }))
+    const wrapper = mount(App)
+
+    expect(wrapper.find('.session-sidebar').exists()).toBe(true)
+    expect(wrapper.find('[data-action="close-sidebar"]').exists()).toBe(false)
+  })
+
+  it('keeps a session preview on the latest user message after assistant updates', async () => {
+    mockStream.mockImplementation(async (_request, { onDelta, onError }) => {
+      onDelta('我可以协助处理退款。')
+      onError('服务暂时不可用')
+    })
+    const wrapper = mount(App)
+
+    await send(wrapper, '我要申请退款')
+
+    const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    expect(persisted[0].preview).toBe('我要申请退款')
   })
 })

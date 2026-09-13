@@ -27,6 +27,26 @@ describe('useChatSessions', () => {
     expect(currentSession.value?.id).toBe(savedSession.id)
   })
 
+  it('restores interrupted streaming replies as errors and persists the repaired state', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        {
+          ...savedSession,
+          messages: [
+            ...savedSession.messages,
+            { id: 'm2', role: 'assistant', content: '正在查询', status: 'streaming' },
+          ],
+        },
+      ]),
+    )
+
+    const { sessions } = useChatSessions()
+
+    expect(sessions.value[0]?.messages[1]?.status).toBe('error')
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')[0].messages[1].status).toBe('error')
+  })
+
   it('creates and activates a session with crypto.randomUUID', () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'generated-session-id' })
     const { createSession, currentSession, sessions } = useChatSessions()
