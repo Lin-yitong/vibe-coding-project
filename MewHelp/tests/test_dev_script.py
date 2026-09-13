@@ -4,8 +4,9 @@ import subprocess
 from pathlib import Path
 
 
-def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -> None:
-    """Catch loading upstream credentials into the FastAPI process or omitting them from LiteLLM."""
+def _capture_dev_process_environments(
+    tmp_path: Path,
+) -> tuple[dict[str, str], dict[str, str], Path]:
     project = tmp_path / "project"
     scripts = project / "scripts"
     bin_dir = tmp_path / "bin"
@@ -54,6 +55,13 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
     proxy_values = dict(line.split("=", 1) for line in proxy_env.read_text().splitlines())
     app_values = dict(line.split("=", 1) for line in app_env.read_text().splitlines())
 
+    return proxy_values, app_values, proxy_stop
+
+
+def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -> None:
+    """Catch loading upstream credentials into the FastAPI process or omitting them from LiteLLM."""
+    proxy_values, app_values, proxy_stop = _capture_dev_process_environments(tmp_path)
+
     assert proxy_values["SILICONFLOW_API_KEY"] == "upstream-key"
     assert proxy_values["LITELLM_API_KEY"] == "app-key"
     assert app_values["LITELLM_API_KEY"] == "app-key"
@@ -61,3 +69,15 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
     assert "SILICONFLOW_API_BASE" not in app_values
     assert "SILICONFLOW_MODEL" not in app_values
     assert proxy_stop.exists()
+
+
+def test_dev_script_bypasses_system_proxy_for_fastapi_loopback_calls(
+    tmp_path: Path,
+) -> None:
+    """Catch HTTPX routing localhost LiteLLM calls through the system proxy."""
+    proxy_values, app_values, _ = _capture_dev_process_environments(tmp_path)
+
+    assert "NO_PROXY" not in proxy_values
+    assert "no_proxy" not in proxy_values
+    assert app_values["NO_PROXY"] == "localhost,127.0.0.1"
+    assert app_values["no_proxy"] == "localhost,127.0.0.1"
