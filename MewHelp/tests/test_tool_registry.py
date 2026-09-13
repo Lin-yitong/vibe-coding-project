@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from app.tools.business import query_logistics
-from app.tools.registry import ToolRegistry
+from app.tools.registry import ToolRegistry, TransientToolExecutionError
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def test_registry_retries_once_after_transient_failure(
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise RuntimeError("temporary failure")
+            raise TransientToolExecutionError("temporary failure")
         return '{"ok": true}'
 
     monkeypatch.setattr(query_logistics, "func", flaky_invoke)
@@ -57,6 +57,29 @@ def test_registry_retries_once_after_transient_failure(
     assert attempts == 2
     assert result.ok is True
     assert result.content == '{"ok": true}'
+
+
+def test_registry_does_not_retry_permanent_execution_failure(
+    monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry
+) -> None:
+    attempts = 0
+
+    def permanently_broken(*, order_no: str) -> str:
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("repository unavailable")
+
+    monkeypatch.setattr(query_logistics, "func", permanently_broken)
+
+    result = asyncio.run(
+        registry.execute(
+            {"id": "call-1", "name": "query_logistics", "args": {"order_no": "1001"}}
+        )
+    )
+
+    assert attempts == 1
+    assert result.ok is False
+    assert result.content == "工具执行失败。"
 
 
 def test_registry_returns_safe_timeout_without_retry(

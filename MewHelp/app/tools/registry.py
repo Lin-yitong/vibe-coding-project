@@ -9,6 +9,10 @@ from pydantic import BaseModel, ValidationError
 from app.tools.business import REGISTERED_TOOLS
 
 
+class TransientToolExecutionError(Exception):
+    """An execution failure that is safe to retry once."""
+
+
 class ToolExecutionResult(BaseModel):
     tool_call_id: str
     name: str
@@ -51,15 +55,15 @@ class ToolRegistry:
                 return ToolExecutionResult(
                     tool_call_id=tool_call_id, name=name, content="工具执行超时。", ok=False
                 )
-            except (TypeError, ValueError):
-                return ToolExecutionResult(
-                    tool_call_id=tool_call_id, name=name, content="工具执行失败。", ok=False
-                )
-            except Exception:
+            except TransientToolExecutionError:
                 if attempt == 1:
                     return ToolExecutionResult(
                         tool_call_id=tool_call_id, name=name, content="工具执行失败。", ok=False
                     )
+            except Exception:
+                return ToolExecutionResult(
+                    tool_call_id=tool_call_id, name=name, content="工具执行失败。", ok=False
+                )
 
         raise AssertionError("unreachable")
 
