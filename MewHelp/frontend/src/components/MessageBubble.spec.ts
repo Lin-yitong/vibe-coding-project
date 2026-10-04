@@ -18,6 +18,23 @@ describe('MessageBubble', () => {
     expect(wrapper.text()).not.toContain('调用')
   })
 
+  it('shows tool calls as readable dashed pills with the original tool name', () => {
+    const wrapper = mount(MessageBubble, {
+      props: {
+        message: {
+          ...assistant,
+          toolNames: ['query_order', 'query_logistics'],
+        },
+      },
+    })
+
+    const pills = wrapper.findAll('.message-bubble__tool')
+    expect(pills).toHaveLength(2)
+    expect(pills[0].get('code').text()).toBe('query_order')
+    expect(pills[1].get('code').text()).toBe('query_logistics')
+    expect(pills.every((pill) => pill.text().includes('调用了'))).toBe(true)
+  })
+
   it('shows a streaming cursor only while the response is streaming', () => {
     const streaming = mount(MessageBubble, {
       props: { message: { ...assistant, status: 'streaming' } },
