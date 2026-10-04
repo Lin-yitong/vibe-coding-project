@@ -17,6 +17,7 @@ def _capture_dev_process_environments(
         "LITELLM_BASE_URL=http://app-proxy/v1\n"
         "LITELLM_API_KEY=app-key\n"
         "TOKEN_BUDGET=1234\n"
+        "DATABASE_URL=mysql+pymysql://app-db/mewhelp\n"
     )
     (project / ".litellm.env").write_text(
         "SILICONFLOW_API_BASE=https://upstream.example/v1\n"
@@ -64,7 +65,9 @@ def test_dev_script_scopes_proxy_secrets_to_litellm_subprocess(tmp_path: Path) -
 
     assert proxy_values["SILICONFLOW_API_KEY"] == "upstream-key"
     assert proxy_values["LITELLM_API_KEY"] == "app-key"
+    assert "DATABASE_URL" not in proxy_values
     assert app_values["LITELLM_API_KEY"] == "app-key"
+    assert app_values["DATABASE_URL"] == "mysql+pymysql://app-db/mewhelp"
     assert "SILICONFLOW_API_KEY" not in app_values
     assert "SILICONFLOW_API_BASE" not in app_values
     assert "SILICONFLOW_MODEL" not in app_values
