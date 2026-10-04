@@ -1,0 +1,27 @@
+[
+  {
+    "id": "logistics-1001",
+    "message": "请查询订单 1001 的物流。",
+    "expected_tool_names": [
+      "query_logistics"
+    ],
+    "expected_faq_match": null
+  },
+  {
+    "id": "faq-return-policy",
+    "message": "退货政策是什么？",
+    "expected_tool_names": [
+      "query_faq"
+    ],
+    "expected_faq_match": true
+  },
+  {
+    "id": "faq-miss-postage",
+    "message": "邮费是多少？",
+    "expected_tool_names": [
+      "query_faq"
+    ],
+    "expected_faq_match": false,
+    "known_limitation": "SQL LIKE keyword recall"
+  }
+]

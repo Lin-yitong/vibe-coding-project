@@ -1,4 +1,7 @@
+from collections.abc import Sequence
+
 from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
@@ -18,3 +21,7 @@ def build_extract_model(settings: Settings) -> Runnable:
     return build_chat_model(settings).with_structured_output(
         AfterSalesTicket, method="json_schema"
     )
+
+
+def build_tool_calling_model(settings: Settings, tools: Sequence[BaseTool]) -> Runnable:
+    return build_chat_model(settings).bind_tools(tools)

@@ -7,10 +7,22 @@ const props = defineProps<{
 }>()
 
 const authorLabel = computed(() => (props.message.role === 'user' ? '用户消息' : '客服消息'))
+const toolNames = computed(() => props.message.toolNames ?? [])
 </script>
 
 <template>
   <article class="message-bubble" :class="`message-bubble--${message.role}`" :aria-label="authorLabel">
+    <div
+      v-if="message.role === 'assistant' && toolNames.length > 0"
+      class="message-bubble__tools"
+      aria-label="已使用工具"
+    >
+      <span v-for="name in toolNames" :key="name" class="message-bubble__tool">
+        <span class="message-bubble__tool-icon" aria-hidden="true">🔧</span>
+        <span>调用了</span>
+        <code>{{ name }}</code>
+      </span>
+    </div>
     <p>{{ message.content }}</p>
     <span v-if="message.status === 'streaming'" data-streaming-cursor class="message-bubble__cursor" aria-label="正在输入"></span>
   </article>
@@ -40,6 +52,35 @@ const authorLabel = computed(() => (props.message.role === 'user' ? '用户消�
 .message-bubble--assistant {
   align-self: start;
   background: #fffdfa;
+}
+
+.message-bubble__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.message-bubble__tool {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  color: #817b78;
+  font-size: 0.75rem;
+  line-height: 1;
+  background: #faf8f2;
+  border: 1px dashed #aaa39b;
+  border-radius: 999px;
+}
+
+.message-bubble__tool code {
+  color: inherit;
+  font: inherit;
+}
+
+.message-bubble__tool-icon {
+  font-size: 0.9rem;
 }
 
 .message-bubble__cursor {

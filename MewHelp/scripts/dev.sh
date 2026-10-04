@@ -6,6 +6,7 @@ set -eu
   . ./.env
   . ./.litellm.env
   set +a
+  unset DATABASE_URL
   exec litellm --config config/litellm.yaml --port 4000
 ) &
 proxy_pid=$!

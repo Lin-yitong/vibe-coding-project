@@ -14,6 +14,8 @@ def test_customer_prompt_gives_safe_next_step_for_incomplete_request() -> None:
     assert "禁止编造" in system.content
     assert "物流" in system.content
     assert "退款" in system.content
+    assert "工具结果" in system.content
+    assert "只根据" in system.content
     assert messages[-1] == HumanMessage(content="我的商品有问题")
 
 

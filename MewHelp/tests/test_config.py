@@ -13,4 +13,5 @@ def test_token_budget_defaults_to_2000() -> None:
         "litellm_api_key": "local",
         "token_budget": 2000,
         "model_alias": "mewhelp-after-sales",
+        "database_url": "mysql+pymysql://mewhelp:mewhelp@127.0.0.1:3306/mewhelp?charset=utf8mb4",
     }

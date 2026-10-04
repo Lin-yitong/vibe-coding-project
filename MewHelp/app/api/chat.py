@@ -1,18 +1,22 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Sequence
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from sqlalchemy.orm import Session
 
-from app.api.sse import encode_delta, encode_done, encode_error
+from app.api.sse import encode_delta, encode_done, encode_error, encode_tool_status
 from app.config import Settings
-from app.core.llm import build_chat_model
-from app.core.memory import SessionStore
+from app.core.llm import build_chat_model, build_tool_calling_model
 from app.core.prompts import CUSTOMER_CHAT_PROMPT
-from app.core.token_counting import count_message_tokens
+from app.core.tool_calling import ToolCallingOrchestrator
+from app.db import Conversation, get_db_session
 from app.schemas.chat import ChatRequest
+from app.services.conversation_service import ConversationService, ConversationSessionMap
+from app.tools.business import build_business_tools
+from app.tools.registry import ToolRegistry
 
 
 router = APIRouter()
@@ -24,56 +28,83 @@ def _assistant_text(chunk: object) -> str | None:
 
 
 @lru_cache(maxsize=1)
-def get_session_store() -> SessionStore:
-    return SessionStore(token_budget=Settings().token_budget)
+def get_conversation_sessions() -> ConversationSessionMap:
+    """Keep only the Chapter 2 process-local browser-session mapping."""
+    return ConversationSessionMap()
 
 
-def get_chat_model() -> ChatOpenAI:
-    return build_chat_model(Settings())
+def get_conversation_service(
+    db_session: Annotated[Session, Depends(get_db_session)],
+    conversation_sessions: Annotated[ConversationSessionMap, Depends(get_conversation_sessions)],
+) -> ConversationService:
+    return ConversationService(db_session, conversation_sessions)
+
+
+def get_tool_calling_orchestrator(
+    conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
+) -> Callable[[Conversation], ToolCallingOrchestrator]:
+    settings = Settings()
+
+    def build(conversation: Conversation) -> ToolCallingOrchestrator:
+        tools = build_business_tools(conversation_id=conversation.id)
+        return ToolCallingOrchestrator(
+            planning_model=build_tool_calling_model(settings, tools),
+            final_model=build_chat_model(settings),
+            tool_registry=ToolRegistry(tools),
+            conversation_service=conversation_service,
+        )
+
+    return build
+
+
+def _messages_for(
+    request_message: str, completed_turns: Sequence[tuple[str, str]]
+) -> Sequence[BaseMessage]:
+    system_message = CUSTOMER_CHAT_PROMPT.format_messages(message=request_message)[0]
+    messages: list[BaseMessage] = [system_message]
+    for user_message, assistant_message in completed_turns:
+        messages.extend([HumanMessage(content=user_message), AIMessage(content=assistant_message)])
+    messages.append(HumanMessage(content=request_message))
+    return messages
 
 
 @router.post("/chat")
 async def stream_chat(
     request: ChatRequest,
-    store: Annotated[SessionStore, Depends(get_session_store)],
-    model: Annotated[ChatOpenAI, Depends(get_chat_model)],
+    conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
+    orchestrator_factory: Annotated[
+        Callable[[Conversation], ToolCallingOrchestrator],
+        Depends(get_tool_calling_orchestrator),
+    ],
 ) -> StreamingResponse:
-    system_message = CUSTOMER_CHAT_PROMPT.format_messages(message=request.message)[0]
-    messages = store.build_messages(
-        request.session_id,
-        request.message,
-        system_message,
-        count_message_tokens,
+    conversation = conversation_service.get_or_create(request.session_id)
+    orchestrator = orchestrator_factory(conversation)
+    messages = _messages_for(
+        request.message, conversation_service.completed_turns_for(conversation)
     )
+    conversation_service.record_user(conversation, request.message)
     try:
-        stream = model.astream(messages)
-        first_text: str | None = None
-        async for chunk in stream:
-            first_text = _assistant_text(chunk)
-            if first_text is not None:
-                break
+        prepared = await orchestrator.prepare_turn(messages, conversation)
     except Exception as exc:
         raise HTTPException(status_code=502, detail="upstream_error") from exc
 
     async def events() -> AsyncIterator[str]:
+        for result in prepared.tool_results:
+            yield encode_tool_status(result.name)
+
         fragments: list[str] = []
-
-        if first_text is not None:
-            fragments.append(first_text)
-            yield encode_delta(first_text)
-
         try:
-            async for chunk in stream:
+            async for chunk in prepared.final_stream():
                 content = _assistant_text(chunk)
                 if content is None:
                     continue
                 fragments.append(content)
                 yield encode_delta(content)
+            conversation_service.record_final_answer(conversation, "".join(fragments))
         except Exception as exc:
             yield encode_error(str(exc))
             return
 
-        store.commit(request.session_id, request.message, "".join(fragments))
         yield encode_done()
 
     return StreamingResponse(
